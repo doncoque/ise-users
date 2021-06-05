@@ -84,38 +84,41 @@ user_list = {}
 for i, user in enumerate(users):
     user_list[user['name']] = user['id']
 
-print(user_list)
+if delete_enabled:
 
-# Open a file called "users.txt" containing usernames (one on each newline) to be deleted.
-fo = open("users.txt", "r+")
-print ("User list to be Deleting users in: ", fo.name)
-line = fo.readlines()
-delete_list = []
-for i in line:
-  delete_list.append(i.strip())
-print ("Read Line: %s" % (delete_list))
-# Close opened file
-fo.close()
+  # Open a file called "users.txt" containing usernames (one on each newline) to be deleted.
+  fo = open("users.txt", "r+")
+  print ("User list to be Deleting users in: ", fo.name)
+  line = fo.readlines()
+  delete_list = []
+  for i in line:
+    delete_list.append(i.strip())
+  print ("Read Line: %s" % (delete_list))
+  # Close opened file
+  fo.close()
 
-delete_dic={}
-not_found=[]
-for user in delete_list:
-  if user in user_list:
-    delete_dic[user] = user_list[user]
+  delete_dic={}
+  not_found=[]
+  for user in delete_list:
+    if user in user_list:
+      delete_dic[user] = user_list[user]
+    else:
+      not_found.append(user)
+
+  print("Users not found on ISE: {}".format(not_found))
+  print("Users to be deleted: {}".format(delete_dic))
+
+  if confirm("Do you want to delete this users? (y/n) "):
+    print("Deleting users...")
+    url = 'https://' + server + ':9060/ers/config/internaluser/'
+    for user in delete_dic:
+      print("Deleting user {}...".format(user), end =" ")
+      response = requests.delete(url + str(delete_dic[user]), headers=headers, auth=auth, verify=False)
+      print(response.ok)
+
   else:
-    not_found.append(user)
-
-print("Users not found on ISE: {}".format(not_found))
-
-print("Users to be deleted: {}".format(delete_dic))
-
-if confirm("Do you want to delete this users? (y/n) "):
-  print("Deleting users...")
-  url = 'https://' + server + ':9060/ers/config/internaluser/'
-  for user in delete_dic:
-    print("Deleting user {}...".format(user), end =" ")
-    response = requests.delete(url + str(delete_dic[user]), headers=headers, auth=auth, verify=False)
-    print(response.ok)
+    print("Exiting without deleting. Bye!")
 
 else:
-  print("Exiting without deleting. Bye!")
+  print("Here is the list of configured users on ISE Server:")
+  print(user_list)
