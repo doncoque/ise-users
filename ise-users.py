@@ -1,9 +1,38 @@
 import sys, getopt
-#from tabulate import tabulate
 import json
 import requests   
+from datetime import datetime
 from requests.auth import HTTPBasicAuth
-requests.packages.urllib3.disable_warnings() 
+
+# Function definition
+def myPrint(text, logfile, eol):
+  """
+  Prints given text to the stdout and appends it to the logfile provided.
+  eol is a flag to select wether we add a \n or not to the line.
+  :return: 0
+  :rtype: int
+  """
+  # Print to screen
+  if eol:
+    print(text)
+  else:
+    print(text, end=" ")
+  
+  # Open the file in append & read mode ('a+')
+  with open(logfile, 'a+') as f:
+    # Move read cursor to the start of file.
+    #f.seek(0)
+    # If file is not empty then append '\n'
+    #data = f.read(100)
+    #if len(data) > 0:
+    #  f.write("\n")
+    # If eol exists then append '\n'
+    if eol:
+      f.write(text + "\n")
+    # Append text at the end of file
+    else:
+      f.write(text)
+  return 0
 
 def main(argv):
   """
@@ -16,24 +45,24 @@ def main(argv):
   try:
     opts, args = getopt.getopt(argv,"ldh",["list","delete"])
   except getopt.GetoptError:
-    print("Wrong arguments. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.")
+    myPrint("Wrong arguments. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
     sys.exit(2)
   for opt, arg in opts:
     if opt == '-h':
-      print("Use '-l' or '--list' to list all userson ISE, '-d' or '--delete' to delete the users on the users.txt file..")
+      myPrint("Use '-l' or '--list' to list all userson ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
       sys.exit()
     elif opt in ("-l", "--list"):
       del_users = False
       arg_flag = True
-      print("You chose only to list users.\n")
+      myPrint("You chose only to list users.\n", logfile, True)
     elif opt in ("-d", "--delete"):
       del_users = True
       arg_flag = True
-      print("You chose to delete users form user.txt file.\n")
+      myPrint("You chose to delete users form user.txt file.\n", logfile, True)
   if arg_flag :
     return del_users
   else : 
-    print("No arguments used. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.")
+    myPrint("No arguments used. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
     sys.exit(1)
   
 def confirm(message):
@@ -46,19 +75,30 @@ def confirm(message):
   while answer not in ["y", "n"]:
     answer = input(message).lower()
   return answer == "y"   
+  
+""" Begining of the script."""
+# Gets time and date to name the logfile in YYmmdd-HM format.
+now = datetime.now()
+timestamp = now.strftime("%Y%m%d-%H%M")
+
+logfile = 'ise-users_'+timestamp+'.log'
+myPrint("Started on {} at {}\n".format(now.strftime("%B %d, %Y"),now.strftime("%H:%M:%S")), logfile, True)
 
 delete_enabled = False
-print("This scritp will either only list current users on ISE server or delete users provided on users.txt file.\n")
+myPrint("This scritp will either list current users on ISE server or delete users provided on users.txt file.", logfile, True)
 delete_enabled = main(sys.argv[1:])
+
+""" We still need to connect to the server and retreive the users to get the id in order to delete them."""
 
 # Open a file called "server.txt" with server ip/name and API key for ISE separated by newlines.
 keyFile = open('server.txt', 'r')
 server = keyFile.readline().strip()
 api_key = keyFile.readline().strip()
 keyFile.close()
-print("Connecting to server " + server + " using API Key provided on file.")
+myPrint("Connecting to server " + server + " using API Key provided on file.", logfile, True)
 
 # Connecting to server to read all users.
+requests.packages.urllib3.disable_warnings() # ignoring certificate validation
 auth = HTTPBasicAuth("APIUser", api_key)
 headers = {'Accept': 'application/json',
            'Content-Type': 'application/json' }
@@ -66,7 +106,7 @@ url = 'https://' + server + ':9060/ers/config/internaluser'
 try:
   response = requests.get(url, headers=headers, auth=auth, verify=False).json()
 except:
-  print("Connection to server " + server + " failed. Exiting...")
+  myPrint("Connection to server " + server + " failed. Exiting...", logfile, True)
   sys.exit(2)
     
 # Extracting user information from api response.
@@ -77,7 +117,6 @@ f = True
 while f:
   try:
     url = response["SearchResult"]["nextPage"]["href"]
-    #print(url)
     response = requests.get(url, headers=headers, auth=auth, verify=False).json()
     users.extend(response["SearchResult"]["resources"])
   except:
@@ -93,15 +132,16 @@ if delete_enabled:
 
   # Open a file called "users.txt" containing usernames (one on each newline) to be deleted.
   fo = open("users.txt", "r+")
-  print ("Deleting users contained in the file {}.".format(fo.name))
+  myPrint ("\nDeleting users contained in the file {}...".format(fo.name), logfile, True)
   line = fo.readlines()
   delete_list = []
   for i in line:
     delete_list.append(i.strip())
-  print ("Users found on the file for deletion: {}".format(delete_list))
+  myPrint ("\nI will try to delete this users on server {}:\n{}".format(server, delete_list), logfile, True)
   # Close opened file
   fo.close()
 
+  # Check to see if user on the list is present on ISE Server.
   delete_dic={}
   not_found=[]
   for user in delete_list:
@@ -109,31 +149,41 @@ if delete_enabled:
       delete_dic[user] = user_list[user]
     else:
       not_found.append(user)
-  print("Users not found on ISE: {}".format(not_found))
-  print("Users to be deleted: {}".format(delete_dic))
+  myPrint("\nI couldn't find this users on server {}:\n{}".format(server, not_found), logfile, True)
+  myPrint("\nI will delete this users:\n{}".format(delete_dic), logfile, True)
 
-  # Ask for confirmation before actually deleting the users.
-  if confirm("\nDo you want to delete this users? (y/n): "):
-    print("Deleting users...")
-    url = 'https://' + server + ':9060/ers/config/internaluser/'
-    for user in delete_dic:
-      print("Deleting user {}...".format(user), end =" ")
-      response = requests.delete(url + str(delete_dic[user]), headers=headers, auth=auth, verify=False)
-      print(response.ok)
+  # Check if there are users on the dic to be deleted.
+  if delete_dic:
+    # Ask for confirmation before actually deleting the users.
+    if confirm("\n\nDo you still want to delete this users? (y/n): "): 
+      myPrint("\nDeleting...", logfile, True)
+      url = 'https://' + server + ':9060/ers/config/internaluser/'    
+      for user in delete_dic:
+        myPrint("Deleting user {}...".format(user), logfile, False)
+        response = requests.delete(url + str(delete_dic[user]), headers=headers, auth=auth, verify=False)
+        if response.ok:
+          ans="OK"
+        else:
+          ans="Fail"
+        myPrint(ans, logfile, True)
+      myPrint("\nJob done. Bye!", logfile, True)
+    else:
+      myPrint("\nExiting without deleting. Bye!", logfile, True)
   else:
-    print("Exiting without deleting. Bye!")
+    myPrint("\nNothing to delete. Bye!", logfile, True)
 
 # List was selected with arguments when the script was run.
 else:
-  print("\nHere is the list of configured users on ISE Server:\n")
+  myPrint("\nHere is the list of the existing users on ISE Server {}.\n".format(server), logfile, True)
     
   # Print the names of the columns.
-  print(" ------------+-------------------------------------- ")
-  print ("| {:<10} | {:<36} |".format('USERNAME', 'ID'))
-  print(" ------------+-------------------------------------- ")
+  myPrint(" ------------+-------------------------------------- ", logfile, True)
+  myPrint ("| {:<10} | {:<36} |".format('USERNAME', 'ID'), logfile, True)
+  myPrint(" ------------+-------------------------------------- ", logfile, True)
   
   # Print each data item.
   for key, value in user_list.items():
-    print ("| {:<10} | {:<36} |".format(key, value))
+    myPrint ("| {:<10} | {:<36} |".format(key, value), logfile, True)
   
-  print(" ------------+-------------------------------------- ")
+  myPrint(" ------------+-------------------------------------- ", logfile, True)
+  myPrint("\nJob done. Bye!", logfile, True)
