@@ -20,12 +20,6 @@ def myPrint(text, logfile, eol):
   
   # Open the file in append & read mode ('a+')
   with open(logfile, 'a+') as f:
-    # Move read cursor to the start of file.
-    #f.seek(0)
-    # If file is not empty then append '\n'
-    #data = f.read(100)
-    #if len(data) > 0:
-    #  f.write("\n")
     # If eol exists then append '\n'
     if eol:
       f.write(text + "\n")
@@ -36,33 +30,46 @@ def myPrint(text, logfile, eol):
 
 def main(argv):
   """
-  Parses arguments and checks for specific options (-h -l -d or --list --delete) to decide wethere to list only or also delete users.
-  :return: True to delete users, False to only list current users.
-  :rtype: bool
+  Parses arguments and checks for specific options (-h -l -d -r or --list --delete --reset) to decide wethere to list only or also delete users or set the change password flag.
+  :return: 'list','delete' or 'reset'
+  :rtype: string
   """
-  del_users = False
+  #del_users = False
+  #res_users = False
   arg_flag = False
+  action = ""
   try:
-    opts, args = getopt.getopt(argv,"ldh",["list","delete"])
+    opts, args = getopt.getopt(argv,"ldrh",["list","delete","reset"])
   except getopt.GetoptError:
-    myPrint("Wrong arguments. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
+    myPrint("Wrong arguments. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users or '-r' or '--reset' to set the changePassword atribute on the users.txt file.", logfile, True)
     sys.exit(2)
   for opt, arg in opts:
     if opt == '-h':
-      myPrint("Use '-l' or '--list' to list all userson ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
+      myPrint("Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users or '-r' or '--reset' to set the changePassword atribute on the users.txt file.", logfile, True)
       sys.exit()
     elif opt in ("-l", "--list"):
-      del_users = False
+      #del_users = False
+      #res_users = False
       arg_flag = True
+      action = 'list'
       myPrint("You chose only to list users.\n", logfile, True)
     elif opt in ("-d", "--delete"):
-      del_users = True
+      #del_users = True
+      #res_users = False
       arg_flag = True
+      action = 'delete'
       myPrint("You chose to delete users form user.txt file.\n", logfile, True)
+    elif opt in ("-r", "--reset"):
+      #del_users = False
+      #res_users = True
+      arg_flag = True
+      action = 'reset'
+      myPrint("You chose to set the changePassword attribute on users form user.txt file.\n", logfile, True)
+
   if arg_flag :
-    return del_users
+    return action
   else : 
-    myPrint("No arguments used. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users on the users.txt file.", logfile, True)
+    myPrint("No arguments used. Use '-l' or '--list' to list all users on ISE, '-d' or '--delete' to delete the users or '-r' or '--reset' to set the changePassword atribute on the users.txt file.", logfile, True)
     sys.exit(1)
   
 def confirm(message):
@@ -84,9 +91,8 @@ timestamp = now.strftime("%Y%m%d-%H%M")
 logfile = 'ise-users_'+timestamp+'.log'
 myPrint("Started on {} at {}\n".format(now.strftime("%B %d, %Y"),now.strftime("%H:%M:%S")), logfile, True)
 
-delete_enabled = False
-myPrint("This scritp will either list current users on ISE server or delete users provided on users.txt file.", logfile, True)
-delete_enabled = main(sys.argv[1:])
+myPrint("This scritp will either list current users on ISE server, delete users or set the changePassword attibute for the users provided on users.txt file.", logfile, True)
+performAction = main(sys.argv[1:])
 
 """ We still need to connect to the server and retreive the users to get the id in order to delete them."""
 
@@ -128,7 +134,7 @@ for i, user in enumerate(users):
     user_list[user['name']] = user['id']
 
 # Delete was selected with arguments when the script was run.
-if delete_enabled:
+if performAction == "delete":
 
   # Open a file called "users.txt" containing usernames (one on each newline) to be deleted.
   fo = open("users.txt", "r+")
@@ -173,7 +179,7 @@ if delete_enabled:
     myPrint("\nNothing to delete. Bye!", logfile, True)
 
 # List was selected with arguments when the script was run.
-else:
+elif performAction == "list":
   myPrint("\nHere is the list of the existing users on ISE Server {}.\n".format(server), logfile, True)
     
   # Print the names of the columns.
@@ -187,3 +193,48 @@ else:
   
   myPrint(" ------------+-------------------------------------- ", logfile, True)
   myPrint("\nJob done. Bye!", logfile, True)
+
+# Reset was selected with arguments when the script was run.
+elif performAction == "reset":
+  # Open a file called "users.txt" containing usernames (one on each newline) to be modified.
+  fo = open("users.txt", "r+")
+  myPrint ("\nModifying users contained in the file {}...".format(fo.name), logfile, True)
+  line = fo.readlines()
+  mod_list = []
+  for i in line:
+    mod_list.append(i.strip())
+  myPrint ("\nI will try to modify this users on server {}:\n{}".format(server, mod_list), logfile, True)
+  # Close opened file
+  fo.close()
+
+  # Check to see if user on the list is present on ISE Server.
+  mod_dic={}
+  not_found=[]
+  for user in mod_list:
+    if user in user_list:
+      mod_dic[user] = user_list[user]
+    else:
+      not_found.append(user)
+  myPrint("\nI couldn't find this users on server {}:\n{}".format(server, not_found), logfile, True)
+  myPrint("\nI will modify this users:\n{}".format(mod_dic), logfile, True)
+
+  # Check if there are users on the dic to be modified.
+  if mod_dic:
+    # Ask for confirmation before actually modifying the users.
+    if confirm("\n\nDo you still want to modify this users? (y/n): "): 
+      myPrint("\nModifying...", logfile, True)
+      url = 'https://' + server + ':9060/ers/config/internaluser/'
+      data = ({ "InternalUser" : { "changePassword" : True, }})
+      for user in mod_dic:
+        myPrint("Modifiying user {}...".format(user), logfile, False)
+        response = requests.put(url + str(mod_dic[user]), headers=headers, auth=auth, verify=False, json=data)
+        if response.ok:
+          ans="OK"
+        else:
+          ans="Fail"
+        myPrint(ans, logfile, True)
+      myPrint("\nJob done. Bye!", logfile, True)
+    else:
+      myPrint("\nExiting without modifying. Bye!", logfile, True)
+  else:
+    myPrint("\nNothing to modify. Bye!", logfile, True)
